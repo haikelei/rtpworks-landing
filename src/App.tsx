@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
   ArrowRight,
@@ -226,29 +226,27 @@ function GameArt({ tone, image, title }: { tone: string; image: string; title: s
 }
 
 function App() {
-  const [submitState, setSubmitState] = useState<'idle' | 'sending' | 'sent' | 'local' | 'error'>('idle')
+  const [submitState, setSubmitState] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
+  const formStartedAt = useRef(Date.now())
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const form = event.currentTarget
-    const accessKey = import.meta.env.VITE_WEB3FORMS_ACCESS_KEY
-
-    if (!accessKey) {
-      setSubmitState('local')
-      return
-    }
-
     setSubmitState('sending')
 
     const formData = new FormData(form)
-    formData.append('access_key', accessKey)
-    formData.append('subject', 'New RTPWorks launch path request')
-    formData.append('from_name', 'RTPWorks landing page')
+    const payload = Object.fromEntries(formData.entries())
 
     try {
-      const response = await fetch('https://api.web3forms.com/submit', {
+      const response = await fetch('/api/contact', {
         method: 'POST',
-        body: formData,
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...payload,
+          submissionId: crypto.randomUUID(),
+          startedAt: formStartedAt.current,
+          consent: formData.get('consent') === 'on',
+        }),
       })
       const result = await response.json()
 
@@ -257,6 +255,7 @@ function App() {
       }
 
       form.reset()
+      formStartedAt.current = Date.now()
       setSubmitState('sent')
     } catch {
       setSubmitState('error')
@@ -426,6 +425,10 @@ function App() {
         </div>
 
         <form className="contact-form" id="contact-form" onSubmit={handleSubmit}>
+          <label className="form-honeypot" aria-hidden="true">
+            Website
+            <input name="website" tabIndex={-1} autoComplete="off" />
+          </label>
           <label>
             Name
             <input name="name" placeholder="Your full name" required />
@@ -433,6 +436,18 @@ function App() {
           <label>
             Email
             <input name="email" type="email" placeholder="you@company.com" required />
+          </label>
+          <label>
+            Company
+            <input name="company" placeholder="Company or studio" required />
+          </label>
+          <label>
+            Your role
+            <input name="role" placeholder="Founder, CTO, product, integration..." required />
+          </label>
+          <label>
+            Target market
+            <input name="market" placeholder="Regulated market or launch region" required />
           </label>
           <label>
             What are you launching?
@@ -469,11 +484,14 @@ function App() {
               <option>Live product needing maintenance</option>
             </select>
           </label>
+          <label className="consent-field">
+            <input name="consent" type="checkbox" required />
+            <span>I agree that RTPWorks may use these details to assess and respond to this project request.</span>
+          </label>
           <button type="submit">
             {submitState === 'sending' ? 'Sending request' : 'Request a launch path'} <Arrow />
           </button>
           {submitState === 'sent' && <p className="form-state">Thanks. We will review your launch context and respond with next steps.</p>}
-          {submitState === 'local' && <p className="form-state">Local preview only. Add a Web3Forms access key to send requests by email.</p>}
           {submitState === 'error' && <p className="form-state form-state-error">We could not send this request. Please contact us by Telegram, WhatsApp, or email.</p>}
         </form>
       </section>
